@@ -8,10 +8,11 @@ pipeline {
 
   stages {
     stage('Clone Repo') {
-      steps {
-        git 'https://github.com/Praven4754/Attendance-Assistant-Phidata.git'
-      }
+    steps {
+        git url: 'https://github.com/Praven4754/Attendance-Assistant-Phidata.git', branch: 'main'
     }
+}
+
 
     stage('Build Docker Image') {
       steps {
