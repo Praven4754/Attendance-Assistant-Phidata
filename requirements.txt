@@ -1,0 +1,6 @@
+phidata>=0.2.33
+gradio>=4.26.0
+openpyxl>=3.1.2
+fpdf>=1.7.2
+python-dotenv>=1.0.1
+sendgrid>=6.10.0
