@@ -10,12 +10,12 @@ An AI-powered smart assistant to help you track daily attendance, generate month
 ````
 ## 🚀 Built With
 ````
-- 🧩 **Phidata** — Agent framework
-- 🗣️ **Gemini Pro LLM** — Natural language understanding
-- 📄 **OpenPyXL** — Excel-based attendance tracking
-- 📬 **SendGrid** — Emailing attendance summaries
-- 📂 **SQLite** — Storing invoice data
-- 🌐 **Gradio** — User interface
+- 🧩 Phidata — Agent framework
+- 🗣️ Gemini Pro LLM — Natural language understanding
+- 📄 OpenPyXL — Excel-based attendance tracking
+- 📬 SendGrid — Emailing attendance summaries
+- 📂 SQLite — Storing invoice data
+- 🌐 Gradio — User interface
 
 ---
 ````
