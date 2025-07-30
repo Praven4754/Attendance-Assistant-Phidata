@@ -15,7 +15,10 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 sh 'docker --version'
-                sh 'docker build -t $DOCKER_IMAGE .'
+                sh '''
+                    cp /vagrant/jenkins/.env .
+                    docker build -t $DOCKER_IMAGE .
+                '''
             }
         }
 
