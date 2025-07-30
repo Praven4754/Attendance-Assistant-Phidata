@@ -2,7 +2,8 @@ pipeline {
   agent any
 
   environment {
-    DOCKER_BUILDKIT = "1"
+    IMAGE_NAME = 'praven4754/attendance-assistant'
+    TAG = 'latest'
   }
 
   stages {
@@ -14,23 +15,31 @@ pipeline {
 
     stage('Build Docker Image') {
       steps {
-        sh 'docker build -t attendance-assistant .'
+        sh 'docker build -t $IMAGE_NAME:$TAG .'
       }
     }
 
-    stage('Create ConfigMap (env)') {
+    stage('Push to Docker Hub') {
       steps {
-        sh '''
-          echo "[INFO] Recreating Kubernetes ConfigMap..."
-          kubectl delete configmap attendance-env --ignore-not-found
-          kubectl create configmap attendance-env --from-env-file=/env/.env
-        '''
+        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+          sh '''
+            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+            docker push $IMAGE_NAME:$TAG
+          '''
+        }
       }
     }
 
     stage('Deploy to Kubernetes') {
       steps {
-        sh 'kubectl apply -f deployment.yaml'
+        sh '''
+          # Step 1: Create or update ConfigMap
+          kubectl create configmap attendance-assistant-config --from-env-file=/vagrant/jenkins/.env --dry-run=client -o yaml | kubectl apply -f -
+
+          # Step 2: Apply deployment and service YAMLs
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+        '''
       }
     }
   }
