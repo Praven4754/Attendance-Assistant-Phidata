@@ -1,13 +1,13 @@
 from phi.assistant import Assistant
-from tools.excel_util import (
+from excel_util import (
     store_entry_to_excel,
     check_existing_entry,
     fetch_timesheet,
     fetch_monthly_timesheet,
     clear_entry,
 )
-from tools.send_email import send_attendance_email
-from tools.salary_utils import calculate_expected_salary
+from send_email import send_attendance_email
+from salary_utils import calculate_expected_salary
 from datetime import datetime
 import calendar
 import os
