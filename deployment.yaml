@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attendance-assistant-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: attendance-assistant
+  template:
+    metadata:
+      labels:
+        app: attendance-assistant
+    spec:
+      containers:
+      - name: attendance-assistant
+        image: attendance-assistant:latest
+        imagePullPolicy: Never  # because image is built locally
+        ports:
+        - containerPort: 7860
+        envFrom:
+        - configMapRef:
+            name: attendance-env
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: attendance-assistant-service
+spec:
+  selector:
+    app: attendance-assistant
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 7860
+  type: NodePort
