@@ -15,25 +15,22 @@ spec:
       containers:
         - name: attendance-assistant
           image: attendance-assistant:latest
-          imagePullPolicy: Never  # ⚠️ Important for local image use
+          imagePullPolicy: Never  # ✅ Force Kubernetes to use local image
           ports:
             - containerPort: 7860
           envFrom:
             - configMapRef:
-                name: attendance-env
-
+                name: attendance-env  # 🔁 Your ConfigMap must exist
 ---
-
 apiVersion: v1
 kind: Service
 metadata:
   name: attendance-service
 spec:
+  type: NodePort
   selector:
     app: attendance-assistant
-  type: NodePort
   ports:
-    - protocol: TCP
-      port: 7860
+    - port: 7860
       targetPort: 7860
-      nodePort: 30086  # optional: fixed NodePort
+      nodePort: 30086  # Optional, or let Kubernetes assign one
