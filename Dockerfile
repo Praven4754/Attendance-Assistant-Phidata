@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt \
 COPY . .
 
 # Copy environment file explicitly
-COPY .env .env
+# COPY .env .env
 
 # Expose Gradio port
 EXPOSE 7860
