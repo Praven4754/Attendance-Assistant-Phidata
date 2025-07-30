@@ -10,4 +10,4 @@ COPY . .
 
 EXPOSE 7860
 
-CMD ["python", "app.py"]  # Replace with your main file
+CMD ["python3", "app.py"]
