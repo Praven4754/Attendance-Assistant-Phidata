@@ -1,7 +1,9 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: attendance-assistant-deployment
+  name: attendance-assistant
+  labels:
+    app: attendance-assistant
 spec:
   replicas: 1
   selector:
@@ -13,24 +15,23 @@ spec:
         app: attendance-assistant
     spec:
       containers:
-      - name: attendance-assistant
-        image: attendance-assistant:latest
-        imagePullPolicy: Never  # because image is built locally
-        ports:
-        - containerPort: 7860
-        envFrom:
-        - configMapRef:
-            name: attendance-env
+        - name: attendance-assistant
+          image: attendance-assistant:latest
+          ports:
+            - containerPort: 7860
+          envFrom:
+            - configMapRef:
+                name: attendance-env
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: attendance-assistant-service
+  name: attendance-service
 spec:
+  type: NodePort
   selector:
     app: attendance-assistant
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 7860
-  type: NodePort
+    - port: 7860
+      targetPort: 7860
+      nodePort: 30086  # You can access this from the browser via Minikube
