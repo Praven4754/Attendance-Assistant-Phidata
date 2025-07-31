@@ -3,14 +3,20 @@ pipeline {
 
     environment {
         IMAGE_NAME = "pravenkumar871/attendance-assistant"
-        KUBE_DEPLOYMENT_NAME = "attendance-assistant"
     }
 
     stages {
+        stage('Clone Repo') {
+            steps {
+                // Jenkins does this automatically in SCM pipelines but explicit clone step won't hurt
+                checkout scm
+            }
+        }
+
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${IMAGE_NAME}:${BUILD_NUMBER}")
+                    docker.build("${IMAGE_NAME}:${env.BUILD_NUMBER}")
                 }
             }
         }
@@ -20,25 +26,16 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     script {
                         sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
-                        sh "docker push ${IMAGE_NAME}:${BUILD_NUMBER}"
+                        sh "docker push ${IMAGE_NAME}:${env.BUILD_NUMBER}"
                     }
                 }
             }
         }
 
-        stage('Deploy to Kubernetes') {
+        stage('Run app.py') {
             steps {
                 script {
-                    sh """
-                    kubectl delete deployment ${KUBE_DEPLOYMENT_NAME} --ignore-not-found
-                    kubectl create deployment ${KUBE_DEPLOYMENT_NAME} --image=${IMAGE_NAME}:${BUILD_NUMBER}
-                    kubectl delete service ${KUBE_DEPLOYMENT_NAME}-service --ignore-not-found
-                    kubectl expose deployment ${KUBE_DEPLOYMENT_NAME} \\
-                      --type=NodePort \\
-                      --port=7860 \\
-                      --target-port=7860 \\
-                      --name=${KUBE_DEPLOYMENT_NAME}-service
-                    """
+                    sh "docker run --rm --env-file /path/to/.env -p 7860:7860 ${IMAGE_NAME}:${env.BUILD_NUMBER}"
                 }
             }
         }
