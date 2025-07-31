@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: attendance-assistant
-        image: praven4754/attendance-assistant:latest  # Replace with your Docker Hub username/image
+        image: pravenkumar871/attendance-assistant:latest  # Replace with your Docker Hub username/image
         ports:
         - containerPort: 7860
         envFrom:
