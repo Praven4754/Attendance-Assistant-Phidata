@@ -36,10 +36,8 @@ pipeline {
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh '''
-                    sh 'kubectl apply -f k8s/deployment.yaml --kubeconfig=/var/jenkins_home/k8s/kubeconfig-jenkins.yaml --validate=false'
-                    sh 'kubectl apply -f k8s/service.yaml --kubeconfig=/var/jenkins_home/k8s/kubeconfig-jenkins.yaml'
-                '''
+                sh 'kubectl apply -f k8s/deployment.yaml --kubeconfig=/var/jenkins_home/k8s/kubeconfig-jenkins.yaml --validate=false'
+                sh 'kubectl apply -f k8s/service.yaml --kubeconfig=/var/jenkins_home/k8s/kubeconfig-jenkins.yaml'
             }
         }
     }
