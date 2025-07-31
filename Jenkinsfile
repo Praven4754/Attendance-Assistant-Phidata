@@ -38,7 +38,12 @@ pipeline {
                     sh """
                     kubectl delete deployment ${KUBE_DEPLOYMENT_NAME} --ignore-not-found
                     kubectl create deployment ${KUBE_DEPLOYMENT_NAME} --image=${IMAGE_NAME}:${BUILD_NUMBER}
-                    kubectl expose deployment ${KUBE_DEPLOYMENT_NAME} --type=NodePort --port=7860 --target-port=7860 --name=${KUBE_DEPLOYMENT_NAME}-service
+                    kubectl delete service ${KUBE_DEPLOYMENT_NAME}-service --ignore-not-found
+                    kubectl expose deployment ${KUBE_DEPLOYMENT_NAME} \\
+                      --type=NodePort \\
+                      --port=7860 \\
+                      --target-port=7860 \\
+                      --name=${KUBE_DEPLOYMENT_NAME}-service
                     """
                 }
             }
