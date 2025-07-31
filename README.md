@@ -123,3 +123,6 @@ Here are some natural language commands you can use:
 * Only sends email when your prompt explicitly says so (e.g., includes "send").
 
 ---
+---
+---
+---
