@@ -1,11 +1,5 @@
 pipeline {
-    agent {
-        // This uses the Jenkins controller container itself
-        node {
-            // This runs the steps directly on the Jenkins controller where Docker is installed
-            label ''
-        }
-    }
+    agent { label 'jenkins' }
 
     environment {
         IMAGE_NAME = "pravenkumar871/attendance-assistant"
@@ -15,7 +9,7 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 script {
-                    sh "docker build -t ${IMAGE_NAME}:${env.BUILD_NUMBER} ."
+                    docker.build("${IMAGE_NAME}:${env.BUILD_NUMBER}")
                 }
             }
         }
