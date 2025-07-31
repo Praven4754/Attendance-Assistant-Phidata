@@ -1,6 +1,10 @@
 pipeline {
     agent {
-        label 'master'
+        // This uses the Jenkins controller container itself
+        node {
+            // This runs the steps directly on the Jenkins controller where Docker is installed
+            label ''
+        }
     }
 
     environment {
