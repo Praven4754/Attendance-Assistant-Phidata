@@ -1,16 +1,17 @@
 pipeline {
-    agent any
+    agent {
+        label 'master'
+    }
 
     environment {
         IMAGE_NAME = "pravenkumar871/attendance-assistant"
-        CONTAINER_NAME = "attendance-assistant-app"
     }
 
     stages {
         stage('Build Docker Image') {
             steps {
                 script {
-                    docker.build("${IMAGE_NAME}:${env.BUILD_NUMBER}")
+                    sh "docker build -t ${IMAGE_NAME}:${env.BUILD_NUMBER} ."
                 }
             }
         }
@@ -29,21 +30,9 @@ pipeline {
         stage('Run Application Container') {
             steps {
                 script {
-                    sh """
-                        docker rm -f ${CONTAINER_NAME} || true
-                        docker run -d --name ${CONTAINER_NAME} -p 7860:7860 -v /vagrant/jenkins/.env:/app/.env ${IMAGE_NAME}:${env.BUILD_NUMBER}
-                    """
+                    sh "docker run --rm -d -p 7860:7860 -v /vagrant/jenkins/.env:/app/.env ${IMAGE_NAME}:${env.BUILD_NUMBER}"
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            echo 'Build pipeline finished.'
-        }
-        failure {
-            echo 'Build failed.'
         }
     }
 }
