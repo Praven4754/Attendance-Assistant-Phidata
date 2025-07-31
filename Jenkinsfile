@@ -1,9 +1,8 @@
 pipeline {
-    agent { label 'jenkins' }
+    agent any
 
     environment {
         IMAGE_NAME = "pravenkumar871/attendance-assistant"
-        CONTAINER_NAME = "attendance-assistant"
     }
 
     stages {
@@ -19,10 +18,8 @@ pipeline {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                     script {
-                        sh '''
-                            echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                            docker push ${IMAGE_NAME}:${BUILD_NUMBER}
-                        '''
+                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                        sh "docker push ${IMAGE_NAME}:${env.BUILD_NUMBER}"
                     }
                 }
             }
@@ -31,23 +28,9 @@ pipeline {
         stage('Run Application Container') {
             steps {
                 script {
-                    sh '''
-                        docker rm -f ${CONTAINER_NAME} || true
-                        docker run -d --name ${CONTAINER_NAME} -p 7860:7860 \
-                        -v /vagrant/jenkins/.env:/app/.env \
-                        ${IMAGE_NAME}:${BUILD_NUMBER}
-                    '''
+                    sh "docker run --rm -d -p 7860:7860 -v /vagrant/jenkins/.env:/app/.env ${IMAGE_NAME}:${env.BUILD_NUMBER}"
                 }
             }
-        }
-    }
-
-    post {
-        success {
-            echo "✅ Deployment succeeded."
-        }
-        failure {
-            echo "❌ Deployment failed."
         }
     }
 }
