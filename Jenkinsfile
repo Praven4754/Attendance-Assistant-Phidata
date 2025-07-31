@@ -7,12 +7,6 @@ pipeline {
     }
 
     stages {
-        stage('Clone Repo') {
-            steps {
-                git 'https://github.com/Praven4754/Attendance-Assistant-Phidata.git'
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
                 script {
