@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = 'praven4754/attendance-assistant:latest'
+        DOCKER_IMAGE = 'pravenkumar871/attendance-assistant:latest'
         DOCKER_CREDS = 'dockerhub-creds'
         ENV_PATH = '/envfile/.env'  // Mounted at runtime
     }
