@@ -1,22 +1,23 @@
 pipeline {
-    agent {
-        docker {
-            image 'docker:24.0.7'  // Official Docker CLI image
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
-        }
-    }
+    agent any
 
     environment {
         DOCKER_IMAGE = 'praven4754/attendance-assistant:latest'
         DOCKER_CREDS = 'dockerhub-creds'
+        ENV_PATH = '/envfile/.env'  // Mounted at runtime
     }
 
     stages {
-        stage('Build Docker Image') {
+        stage('Check Docker') {
             steps {
                 sh 'docker --version'
+            }
+        }
+
+        stage('Copy .env & Build Docker Image') {
+            steps {
                 sh '''
-                    cp /vagrant/jenkins/.env .
+                    cp ${ENV_PATH} .env
                     docker build -t $DOCKER_IMAGE .
                 '''
             }
@@ -24,7 +25,7 @@ pipeline {
 
         stage('Push to Docker Hub') {
             steps {
-                withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDS}", passwordVariable: 'DOCKER_PASSWORD', usernameVariable: 'DOCKER_USERNAME')]) {
+                withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDS}", usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
                     sh '''
                         echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
                         docker push $DOCKER_IMAGE
