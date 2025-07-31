@@ -185,4 +185,4 @@ if __name__ == "__main__":
             outputs=[download_btn, download_btn],
         )
 
-    ui.launch()
+    ui.launch(server_name="0.0.0.0", server_port=7860)
