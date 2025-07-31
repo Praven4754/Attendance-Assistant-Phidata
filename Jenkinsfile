@@ -2,42 +2,45 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_IMAGE = 'pravenkumar871/attendance-assistant:latest'
-        DOCKER_CREDS = 'dockerhub-creds'
-        ENV_PATH = '/envfile/.env'  // Mounted at runtime
+        IMAGE_NAME = "pravenkumar871/attendance-assistant"
+        KUBE_DEPLOYMENT_NAME = "attendance-assistant"
     }
 
     stages {
-        stage('Check Docker') {
+        stage('Clone Repo') {
             steps {
-                sh 'docker --version'
+                git 'https://github.com/Praven4754/Attendance-Assistant-Phidata.git'
             }
         }
 
-        stage('Copy .env & Build Docker Image') {
+        stage('Build Docker Image') {
             steps {
-                sh '''
-                    cp ${ENV_PATH} .env
-                    docker build -t $DOCKER_IMAGE .
-                '''
+                script {
+                    docker.build("${IMAGE_NAME}:${BUILD_NUMBER}")
+                }
             }
         }
 
-        stage('Push to Docker Hub') {
+        stage('Push Docker Image') {
             steps {
-                withCredentials([usernamePassword(credentialsId: "${DOCKER_CREDS}", usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
-                    sh '''
-                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
-                        docker push $DOCKER_IMAGE
-                    '''
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    script {
+                        sh "echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin"
+                        sh "docker push ${IMAGE_NAME}:${BUILD_NUMBER}"
+                    }
                 }
             }
         }
 
         stage('Deploy to Kubernetes') {
             steps {
-                sh 'kubectl apply -f k8s/deployment.yaml --kubeconfig=/var/jenkins_home/k8s/kubeconfig-jenkins.yaml --validate=false'
-                sh 'kubectl apply -f k8s/service.yaml --kubeconfig=/var/jenkins_home/k8s/kubeconfig-jenkins.yaml'
+                script {
+                    sh """
+                    kubectl delete deployment ${KUBE_DEPLOYMENT_NAME} --ignore-not-found
+                    kubectl create deployment ${KUBE_DEPLOYMENT_NAME} --image=${IMAGE_NAME}:${BUILD_NUMBER}
+                    kubectl expose deployment ${KUBE_DEPLOYMENT_NAME} --type=NodePort --port=7860 --target-port=7860 --name=${KUBE_DEPLOYMENT_NAME}-service
+                    """
+                }
             }
         }
     }
