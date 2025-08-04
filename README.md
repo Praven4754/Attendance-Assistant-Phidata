@@ -121,3 +121,4 @@ Here are some natural language commands you can use:
 * Invoices are generated as PDFs from a local `SQLite` database.
 * Emailing requires a verified SendGrid sender and proper `.env` config.
 * Only sends email when your prompt explicitly says so (e.g., includes "send")...
+---
