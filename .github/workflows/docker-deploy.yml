@@ -13,7 +13,8 @@ env:
 # 🔧 Define the job(s) to run
 jobs:
   build-and-deploy:          # Job name (can be anything)
-    runs-on: ubuntu-latest   # Use the latest Ubuntu runner (GitHub-hosted)
+    runs-on: self-hosted
+   # Use the latest Ubuntu runner (GitHub-hosted)
 
     steps:  # 📋 Each task to be performed, in order
 
