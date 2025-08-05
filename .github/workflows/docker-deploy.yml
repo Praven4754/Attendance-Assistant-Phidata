@@ -1,37 +1,53 @@
+# 👷 Name of the workflow (shows in GitHub Actions tab)
 name: Docker CI/CD Pipeline
 
+# 🚀 When to trigger this workflow
 on:
   push:
-    branches: [ main ]  # trigger only on main branch
+    branches: [ main ]  # Run only when code is pushed to the main branch
 
+# 🌍 Global environment variables (can be reused in any step)
 env:
-  IMAGE_NAME: pravenkumar871/attendance-assistant
+  IMAGE_NAME: pravenkumar871/attendance-assistant  # Docker image name to build and push
 
+# 🔧 Define the job(s) to run
 jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
+  build-and-deploy:          # Job name (can be anything)
+    runs-on: ubuntu-latest   # Use the latest Ubuntu runner (GitHub-hosted)
 
-    steps:
+    steps:  # 📋 Each task to be performed, in order
+
+      # ✅ Step 1: Checkout the code from the repo
       - name: Checkout Code
         uses: actions/checkout@v3
 
+      # 🛠️ Step 2: Set up Docker Buildx (for building Docker images)
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # 🔐 Step 3: Log in to Docker Hub using secrets
       - name: Log in to Docker Hub
         uses: docker/login-action@v2
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKER_USERNAME }}  # from GitHub Secrets
+          password: ${{ secrets.DOCKER_PASSWORD }}  # from GitHub Secrets
 
+      # 🧱 Step 4: Build the Docker image and tag it with the GitHub run number
       - name: Build Docker Image
         run: |
           docker build -t $IMAGE_NAME:${{ github.run_number }} .
 
+      # 🚀 Step 5: Push the Docker image to Docker Hub
       - name: Push Docker Image
         run: |
           docker push $IMAGE_NAME:${{ github.run_number }}
 
+      # 🔐 Step 6: Create .env file dynamically using your secret
+      - name: Create .env File from GitHub Secret
+        run: |
+          echo "GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}" >> .env
+
+      # 🧪 Step 7: Run the Docker container and mount the .env file inside it
       - name: Run Docker Container
         run: |
           docker run --rm -d -p 7860:7860 -v ${{ github.workspace }}/.env:/app/.env $IMAGE_NAME:${{ github.run_number }}
