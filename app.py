@@ -13,11 +13,12 @@ import calendar
 import os
 import re
 import gradio as gr
-from dotenv import load_dotenv
 from llm import llm as agent_llm
 
-# ✅ Load .env outside repo (assumes Jenkins mounts /vagrant/jenkins/.env)
-load_dotenv(dotenv_path="/vagrant/jenkins/.env", override=True)
+# ✅ Read environment variables directly (from GitHub Secrets in Docker)
+API_KEY = os.getenv("API_KEY")
+OTHER_KEY = os.getenv("OTHER_KEY")
+PORT = int(os.getenv("PORT", 7860))  # Default to 7860 if not set
 
 # ✅ Extract status and remarks
 def extract_status_and_remarks(prompt: str):
@@ -185,4 +186,4 @@ if __name__ == "__main__":
             outputs=[download_btn, download_btn],
         )
 
-    ui.launch(server_name="0.0.0.0", server_port=7860)
+    ui.launch(server_name="0.0.0.0", server_port=PORT)
