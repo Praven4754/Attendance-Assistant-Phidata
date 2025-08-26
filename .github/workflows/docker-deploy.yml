@@ -26,6 +26,7 @@ jobs:
           set -eux
 
           APP_DIR=/home/ubuntu/app
+          PORT=7860
 
           # Install Docker if missing
           if ! command -v docker >/dev/null 2>&1; then
@@ -42,24 +43,32 @@ jobs:
           git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
           cd "$APP_DIR"
 
-          # Write .env file with available secrets
+          # Write .env file with available secret(s)
           cat > "$APP_DIR/.env" <<ENV_EOF
           GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
           ENV_EOF
+
+          # Find and stop any container using port 7860
+          OCCUPYING_CONTAINER=$(sudo docker ps --filter "publish=$PORT" -q | head -n1 || true)
+          if [ -n "$OCCUPYING_CONTAINER" ]; then
+            echo "Stopping container $OCCUPYING_CONTAINER occupying port $PORT"
+            sudo docker stop "$OCCUPYING_CONTAINER" || true
+            sudo docker rm "$OCCUPYING_CONTAINER" || true
+          fi
+
+          # Also remove container named attendance-app if exists
+          if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app$"; then
+            sudo docker rm -f attendance-app || true
+          fi
 
           # Build Docker image with timestamp tag
           IMAGE_TAG="attendance-app-$(date +%Y%m%d%H%M%S)"
           sudo docker build -t attendance-app:$IMAGE_TAG "$APP_DIR"
 
-          # Stop and remove previous container if exists
-          if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app$"; then
-            sudo docker rm -f attendance-app
-          fi
-
           # Run new container
           sudo docker run -d --name attendance-app \
             --env-file "$APP_DIR/.env" \
-            -p 7860:7860 attendance-app:$IMAGE_TAG
+            -p $PORT:$PORT attendance-app:$IMAGE_TAG
 
           # Cleanup old images
           sudo docker image prune -f
