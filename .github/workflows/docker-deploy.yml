@@ -24,41 +24,43 @@ jobs:
           OTHER_KEY: ${{ secrets.OTHER_KEY }}
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
-            set -eux
+set -eux
 
-            APP_DIR=/home/ubuntu/app
+APP_DIR=/home/ubuntu/app
 
-            # Install Docker if missing
-            if ! command -v docker >/dev/null 2>&1; then
-              sudo apt-get update -y
-              sudo apt-get install -y docker.io git
-              sudo systemctl enable docker
-              sudo systemctl start docker
-            fi
+# Install Docker if missing
+if ! command -v docker >/dev/null 2>&1; then
+  sudo apt-get update -y
+  sudo apt-get install -y docker.io git
+  sudo systemctl enable docker
+  sudo systemctl start docker
+fi
 
-            # Remove old app and clone latest
-            if [ -d "$APP_DIR" ]; then
-              rm -rf "$APP_DIR"
-            fi
-            git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
-            cd "$APP_DIR"
+# Remove old app directory
+rm -rf $APP_DIR
 
-            # Write .env file from GitHub Secrets
-            cat <<ENV_EOF > "$APP_DIR/.env"
-API_KEY=$API_KEY
-OTHER_KEY=$OTHER_KEY
-ENV_EOF
+# Clone latest code
+git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git $APP_DIR
+cd $APP_DIR
 
-            # Build Docker image
-            IMAGE_TAG="deploy-$(date +%Y%m%d%H%M%S)"
-            sudo docker build -t attendance-app:$IMAGE_TAG "$APP_DIR"
+# Write .env file from GitHub Secrets
+cat > "$APP_DIR/.env" <<EOF
+API_KEY=${API_KEY}
+OTHER_KEY=${OTHER_KEY}
+EOF
 
-            # Restart container
-            sudo docker rm -f attendance-app || true
-            sudo docker run -d --name attendance-app \
-              --env-file "$APP_DIR/.env" \
-              -p 7860:7860 attendance-app:$IMAGE_TAG
+# Build Docker image
+IMAGE_TAG="attendance-app-$(date +%Y%m%d%H%M%S)"
+sudo docker build -t attendance-app:$IMAGE_TAG $APP_DIR
 
-            # Clean up old images
-            sudo docker image prune -f || true
-          EOF
+# Stop and remove previous container if exists
+sudo docker rm -f attendance-app || true
+
+# Run new container
+sudo docker run -d --name attendance-app \
+  --env-file $APP_DIR/.env \
+  -p 7860:7860 attendance-app:$IMAGE_TAG
+
+# Cleanup old images
+sudo docker image prune -f || true
+EOF
