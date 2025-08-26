@@ -1,41 +1,64 @@
-name: Docker CI/CD Pipeline
+name: Deploy to EC2
 
 on:
   push:
-    branches:
-      - main
-
-env:
-  IMAGE_NAME: pravenkumar871/attendance-assistant
+    branches: [ "main" ]
 
 jobs:
-  build-and-deploy:
-    runs-on: self-hosted
+  deploy:
+    runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to DockerHub
-        uses: docker/login-action@v2
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
-      - name: Build Docker Image
+      - name: Deploy on EC2
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          API_KEY: ${{ secrets.API_KEY }}
+          OTHER_KEY: ${{ secrets.OTHER_KEY }}
         run: |
-          docker build -t ${{ env.IMAGE_NAME }}:${{ github.run_number }} .
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
+            set -eux
+            # Install Docker if missing
+            if ! command -v docker >/dev/null 2>&1; then
+              sudo apt-get update -y
+              sudo apt-get install -y docker.io git
+              sudo systemctl enable docker
+              sudo systemctl start docker
+            fi
 
-      - name: Push Docker Image to DockerHub
-        run: |
-          docker push ${{ env.IMAGE_NAME }}:${{ github.run_number }}
+            # Get latest code
+            if [ -d /opt/app ]; then
+              cd /opt/app
+              git fetch --all
+              git reset --hard origin/main
+            else
+              sudo rm -rf /opt/app || true
+              git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git /opt/app
+              cd /opt/app
+            fi
 
-      - name: Run Docker Container
-        run: |
-          docker run --rm -d -p 7860:7860 \
-            -v /home/vagrant/output:/app/output \
-            -v ${{ github.workspace }}/.env:/app/.env \
-            ${{ env.IMAGE_NAME }}:${{ github.run_number }}
+            # Write .env from GitHub Secrets
+            cat <<EOT > /opt/app/.env
+            API_KEY=${API_KEY}
+            OTHER_KEY=${OTHER_KEY}
+            EOT
+
+            # Build Docker image
+            IMAGE_TAG="deploy-$(date +%Y%m%d%H%M%S)"
+            sudo docker build -t attendance-app:$IMAGE_TAG /opt/app
+
+            # Restart container
+            sudo docker rm -f attendance-app || true
+            sudo docker run -d --name attendance-app \
+              --env-file /opt/app/.env \
+              -p 7860:7860 attendance-app:$IMAGE_TAG
+
+            sudo docker image prune -f || true
+          EOF
