@@ -26,6 +26,8 @@ jobs:
           ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST << 'EOF'
             set -eux
 
+            APP_DIR=/home/ubuntu/app
+
             # Install Docker if missing
             if ! command -v docker >/dev/null 2>&1; then
               sudo apt-get update -y
@@ -34,25 +36,19 @@ jobs:
               sudo systemctl start docker
             fi
 
-            # Set app directory in ubuntu home
-            APP_DIR="/home/ubuntu/app"
-
-            # Get latest code
+            # Remove old app and clone latest
             if [ -d "$APP_DIR" ]; then
-              cd "$APP_DIR"
-              git fetch --all
-              git reset --hard origin/main
-            else
-              rm -rf "$APP_DIR" || true
-              git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
-              cd "$APP_DIR"
+              rm -rf "$APP_DIR"
             fi
+            git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
+            cd "$APP_DIR"
 
-            # Write .env from GitHub Secrets
-            cat <<EOF > "$APP_DIR/.env"
-            API_KEY=${API_KEY}
-            OTHER_KEY=${OTHER_KEY}
-            EOF
+            # Write .env file from GitHub Secrets
+            cat <<ENV_EOF > "$APP_DIR/.env"
+API_KEY=$API_KEY
+OTHER_KEY=$OTHER_KEY
+ENV_EOF
+
             # Build Docker image
             IMAGE_TAG="deploy-$(date +%Y%m%d%H%M%S)"
             sudo docker build -t attendance-app:$IMAGE_TAG "$APP_DIR"
@@ -63,5 +59,6 @@ jobs:
               --env-file "$APP_DIR/.env" \
               -p 7860:7860 attendance-app:$IMAGE_TAG
 
+            # Clean up old images
             sudo docker image prune -f || true
           EOF
