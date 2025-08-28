@@ -31,13 +31,19 @@ jobs:
           EXTERNAL_PORT=7860   # keep same as app port to avoid confusion
 
           # -----------------------------
-          # Install Docker if not present
+          # Install Docker + jq if missing
           # -----------------------------
           if ! command -v docker >/dev/null 2>&1; then
             sudo apt-get update -y
             sudo apt-get install -y docker.io git curl unzip jq
             sudo systemctl enable docker
             sudo systemctl start docker
+          else
+            # Ensure jq is installed even if docker exists
+            if ! command -v jq >/dev/null 2>&1; then
+              sudo apt-get update -y
+              sudo apt-get install -y jq
+            fi
           fi
 
           # -----------------------------
