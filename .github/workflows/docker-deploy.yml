@@ -1,4 +1,4 @@
-name: Deploy to EC2
+name: Deploy to EC2 with Ngrok
 
 on:
   push:
@@ -21,6 +21,7 @@ jobs:
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST 'bash -s' <<'EOF'
           set -eux
@@ -29,18 +30,21 @@ jobs:
           INTERNAL_PORT=7860
           EXTERNAL_PORT=80
 
-          # Install Docker if missing
+          # Install Docker + dependencies if missing
           if ! command -v docker >/dev/null 2>&1; then
             sudo apt-get update -y
-            sudo apt-get install -y docker.io git
+            sudo apt-get install -y docker.io git curl unzip
             sudo systemctl enable docker
             sudo systemctl start docker
           fi
 
-          # Ensure user ubuntu can run docker without sudo
-          if ! groups ubuntu | grep -q docker; then
-            sudo usermod -aG docker ubuntu
-            newgrp docker
+          # Install ngrok if missing
+          if ! command -v ngrok >/dev/null 2>&1; then
+            curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip -o ngrok.zip
+            unzip ngrok.zip
+            sudo mv ngrok /usr/local/bin/
+            rm -f ngrok.zip
+            ngrok config add-authtoken ${NGROK_AUTH_TOKEN}
           fi
 
           # Remove old app directory
@@ -50,25 +54,33 @@ jobs:
           git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
           cd "$APP_DIR"
 
-          # Write .env file with available secret(s)
+          # Write .env file
           cat > "$APP_DIR/.env" <<ENV_EOF
-          GOOGLE_API_KEY=${GOOGLE_API_KEY:-not_set}
+          GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
           ENV_EOF
 
-          # Stop old container if running
-          if docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app$"; then
-            docker rm -f attendance-app || true
+          # Stop existing container if running
+          if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app$"; then
+            sudo docker rm -f attendance-app || true
           fi
 
-          # Build Docker image with timestamp tag
+          # Build Docker image with timestamp
           IMAGE_TAG="attendance-app-$(date +%Y%m%d%H%M%S)"
-          docker build -t attendance-app:$IMAGE_TAG "$APP_DIR"
+          sudo docker build -t attendance-app:$IMAGE_TAG "$APP_DIR"
 
-          # Run new container (map external port 80 -> internal port 7860)
-          docker run -d --name attendance-app \
+          # Run new container
+          sudo docker run -d --name attendance-app \
             --env-file "$APP_DIR/.env" \
             -p $EXTERNAL_PORT:$INTERNAL_PORT attendance-app:$IMAGE_TAG
 
-          # Cleanup old images
-          docker image prune -f
+          # Kill old ngrok if running
+          pkill -f "ngrok tcp" || true
+          pkill -f "ngrok http" || true
+
+          # Start ngrok in background (tunnel external port 80)
+          nohup ngrok http $EXTERNAL_PORT > ngrok.log 2>&1 &
+
+          # Wait for ngrok to initialize and print the public URL
+          sleep 5
+          curl --silent --show-error http://127.0.0.1:4040/api/tunnels | grep -Eo '"https://[^"]+' | head -n1
           EOF
