@@ -18,6 +18,7 @@ jobs:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
       - name: Deploy on EC2
+        id: deploy
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
@@ -28,7 +29,7 @@ jobs:
 
           APP_DIR=/home/ubuntu/app
           INTERNAL_PORT=7860
-          EXTERNAL_PORT=7860   # keep same as app port to avoid confusion
+          EXTERNAL_PORT=7860
 
           # -----------------------------
           # Install Docker + jq if missing
@@ -39,7 +40,6 @@ jobs:
             sudo systemctl enable docker
             sudo systemctl start docker
           else
-            # Ensure jq is installed even if docker exists
             if ! command -v jq >/dev/null 2>&1; then
               sudo apt-get update -y
               sudo apt-get install -y jq
@@ -60,45 +60,39 @@ jobs:
           # -----------------------------
           # Deploy the App
           # -----------------------------
-          # Remove old app directory
           rm -rf "$APP_DIR"
-
-          # Clone latest code
           git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
           cd "$APP_DIR"
 
-          # Write .env file
+          # Write .env
           cat > "$APP_DIR/.env" <<ENV_EOF
           GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
           ENV_EOF
 
-          # Stop old container if running
+          # Stop old container
           if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app$"; then
             sudo docker rm -f attendance-app || true
           fi
 
-          # Build Docker image with timestamp
           IMAGE_TAG="attendance-app-$(date +%Y%m%d%H%M%S)"
           sudo docker build -t attendance-app:$IMAGE_TAG "$APP_DIR"
 
-          # Run new container
           sudo docker run -d --name attendance-app \
             --env-file "$APP_DIR/.env" \
             -p $EXTERNAL_PORT:$INTERNAL_PORT attendance-app:$IMAGE_TAG
 
           # -----------------------------
-          # Start Ngrok Tunnel
+          # Start Ngrok
           # -----------------------------
-          # Kill any existing ngrok
-          pkill -f "ngrok tcp" || true
           pkill -f "ngrok http" || true
-
-          # Start ngrok in background
           nohup ngrok http $EXTERNAL_PORT > ngrok.log 2>&1 &
 
-          # Wait for ngrok to initialize
           sleep 5
-
-          # Print public URL to GitHub Actions logs
-          curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
+          NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
+          echo "NGROK_URL=$NGROK_URL" >> /home/ubuntu/ngrok_url.txt
+          echo "\$NGROK_URL"
           EOF
+
+      - name: Show Ngrok URL
+        run: |
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "cat /home/ubuntu/ngrok_url.txt"
