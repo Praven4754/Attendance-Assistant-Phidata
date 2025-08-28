@@ -28,17 +28,21 @@ jobs:
 
           APP_DIR=/home/ubuntu/app
           INTERNAL_PORT=7860
-          EXTERNAL_PORT=80
+          EXTERNAL_PORT=7860   # keep same as app port to avoid confusion
 
-          # Install Docker + dependencies if missing
+          # -----------------------------
+          # Install Docker if not present
+          # -----------------------------
           if ! command -v docker >/dev/null 2>&1; then
             sudo apt-get update -y
-            sudo apt-get install -y docker.io git curl unzip
+            sudo apt-get install -y docker.io git curl unzip jq
             sudo systemctl enable docker
             sudo systemctl start docker
           fi
 
-          # Install ngrok if missing
+          # -----------------------------
+          # Install Ngrok if not present
+          # -----------------------------
           if ! command -v ngrok >/dev/null 2>&1; then
             curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip -o ngrok.zip
             unzip ngrok.zip
@@ -47,6 +51,9 @@ jobs:
             ngrok config add-authtoken ${NGROK_AUTH_TOKEN}
           fi
 
+          # -----------------------------
+          # Deploy the App
+          # -----------------------------
           # Remove old app directory
           rm -rf "$APP_DIR"
 
@@ -59,7 +66,7 @@ jobs:
           GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
           ENV_EOF
 
-          # Stop existing container if running
+          # Stop old container if running
           if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app$"; then
             sudo docker rm -f attendance-app || true
           fi
@@ -73,14 +80,19 @@ jobs:
             --env-file "$APP_DIR/.env" \
             -p $EXTERNAL_PORT:$INTERNAL_PORT attendance-app:$IMAGE_TAG
 
-          # Kill old ngrok if running
+          # -----------------------------
+          # Start Ngrok Tunnel
+          # -----------------------------
+          # Kill any existing ngrok
           pkill -f "ngrok tcp" || true
           pkill -f "ngrok http" || true
 
-          # Start ngrok in background (tunnel external port 80)
+          # Start ngrok in background
           nohup ngrok http $EXTERNAL_PORT > ngrok.log 2>&1 &
 
-          # Wait for ngrok to initialize and print the public URL
+          # Wait for ngrok to initialize
           sleep 5
-          curl --silent --show-error http://127.0.0.1:4040/api/tunnels | grep -Eo '"https://[^"]+' | head -n1
+
+          # Print public URL to GitHub Actions logs
+          curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
           EOF
