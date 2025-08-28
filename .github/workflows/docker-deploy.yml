@@ -2,7 +2,8 @@ name: Deploy to EC2
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - main   # or your deployment branch
 
 jobs:
   deploy:
@@ -10,67 +11,54 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
 
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.9.0
-        with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
-
-      - name: Deploy on EC2
+      - name: Deploy to EC2
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
-          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
-          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+          EC2_USER: ubuntu
+          EC2_KEY: ${{ secrets.EC2_KEY }}
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST 'bash -s' <<'EOF'
-          set -eux
+          echo "$EC2_KEY" > ec2_key.pem
+          chmod 600 ec2_key.pem
 
-          APP_DIR=/home/ubuntu/app
-          INTERNAL_PORT=7860
-          EXTERNAL_PORT=80
+          ssh -o StrictHostKeyChecking=no -i ec2_key.pem $EC2_USER@$EC2_HOST 'bash -s' <<'EOF'
+            set -e
 
-          # Install dependencies
-          sudo apt-get update -y
-          sudo apt-get install -y docker.io git unzip curl
-          sudo systemctl enable docker
-          sudo systemctl start docker
+            echo "✅ Updating system..."
+            sudo apt-get update -y
 
-          # Install ngrok if not installed
-          if ! command -v ngrok >/dev/null 2>&1; then
-            curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip -o ngrok.zip
-            unzip ngrok.zip
-            sudo mv ngrok /usr/local/bin/
-            rm ngrok.zip
-          fi
+            echo "✅ Installing Docker (if missing)..."
+            if ! command -v docker &> /dev/null
+            then
+              curl -fsSL https://get.docker.com -o get-docker.sh
+              sh get-docker.sh
+              sudo usermod -aG docker $USER
+            fi
 
-          # Auth ngrok
-          ngrok config add-authtoken "$NGROK_AUTHTOKEN"
+            echo "✅ Installing Git..."
+            sudo apt-get install -y git
 
-          # Remove old app
-          rm -rf "$APP_DIR"
-          git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
-          cd "$APP_DIR"
+            echo "✅ Cloning/updating project..."
+            cd ~
+            if [ -d "Attendance-Assistant-Phidata" ]; then
+              cd Attendance-Assistant-Phidata && git pull
+            else
+              git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git
+              cd Attendance-Assistant-Phidata
+            fi
 
-          # Create .env
-          cat > "$APP_DIR/.env" <<ENV_EOF
-          GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
-          ENV_EOF
+            echo "✅ Building and running Docker container..."
+            docker build -t attendance-assistant .
+            docker stop attendance-container || true
+            docker rm attendance-container || true
+            docker run -d -p 80:7860 --name attendance-container attendance-assistant
 
-          # Stop old container if exists
-          if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app$"; then
-            sudo docker rm -f attendance-app || true
-          fi
+            echo "✅ Starting ngrok tunnel..."
+            pkill ngrok || true
+            nohup ngrok http 80 > ngrok.log 2>&1 &
 
-          # Build and run Docker
-          IMAGE_TAG="attendance-app-$(date +%Y%m%d%H%M%S)"
-          sudo docker build -t attendance-app:$IMAGE_TAG "$APP_DIR"
-          sudo docker run -d --name attendance-app --env-file "$APP_DIR/.env" -p $EXTERNAL_PORT:$INTERNAL_PORT attendance-app:$IMAGE_TAG
-
-          # Start ngrok in background
-          nohup ngrok http $EXTERNAL_PORT > ngrok.log 2>&1 &
-
-          # Wait a few seconds and print tunnel URL
-          sleep 5
-          curl --silent http://127.0.0.1:4040/api/tunnels | grep -o 'https://[^"]*' || true
+            echo "✅ Waiting for ngrok to start..."
+            sleep 5
+            curl --silent http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url'
           EOF
