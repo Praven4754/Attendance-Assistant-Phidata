@@ -66,7 +66,7 @@ jobs:
           ngrok config add-authtoken \"\$NGROK_AUTH_TOKEN\"
           
           # ----------------------
-          # Safe cleanup with existence checks
+          # Safe cleanup using kill with PID
           # ----------------------
           
           # Stop previous container if it exists
@@ -77,22 +77,39 @@ jobs:
             echo 'No existing container to remove'
           fi
           
-          # Kill existing ngrok processes if they exist
-          if pgrep -f 'ngrok http' >/dev/null; then
-            echo 'Killing existing ngrok processes...'
-            sudo pkill -f 'ngrok http'
+          # Kill existing ngrok processes using PID instead of pkill
+          NGROK_PIDS=\$(pgrep -f 'ngrok http' || echo '')
+          if [ -n \"\$NGROK_PIDS\" ]; then
+            echo 'Found ngrok processes with PIDs: '\$NGROK_PIDS
+            for pid in \$NGROK_PIDS; do
+              echo \"Killing ngrok process with PID: \$pid\"
+              kill \$pid 2>/dev/null || echo \"PID \$pid already terminated\"
+            done
             sleep 2
+            
+            # Force kill if still running
+            REMAINING_PIDS=\$(pgrep -f 'ngrok http' || echo '')
+            if [ -n \"\$REMAINING_PIDS\" ]; then
+              echo 'Force killing remaining ngrok processes...'
+              for pid in \$REMAINING_PIDS; do
+                kill -9 \$pid 2>/dev/null || echo \"PID \$pid already terminated\"
+              done
+            fi
           else
             echo 'No existing ngrok processes to kill'
           fi
           
           # Free port if it's in use
-          if sudo fuser \$EXTERNAL_PORT/tcp >/dev/null 2>&1; then
-            echo 'Freeing port \$EXTERNAL_PORT...'
-            sudo fuser -k \$EXTERNAL_PORT/tcp
+          PORT_PIDS=\$(sudo fuser \$EXTERNAL_PORT/tcp 2>/dev/null || echo '')
+          if [ -n \"\$PORT_PIDS\" ]; then
+            echo \"Processes using port \$EXTERNAL_PORT: \$PORT_PIDS\"
+            for pid in \$PORT_PIDS; do
+              echo \"Killing process on port \$EXTERNAL_PORT with PID: \$pid\"
+              sudo kill \$pid 2>/dev/null || echo \"PID \$pid already terminated\"
+            done
             sleep 2
           else
-            echo 'Port \$EXTERNAL_PORT is already free'
+            echo \"Port \$EXTERNAL_PORT is already free\"
           fi
           
           # ----------------------
@@ -104,16 +121,21 @@ jobs:
           # ----------------------
           # Clone project
           # ----------------------
+          echo 'Cloning project repository...'
           git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git \"\$APP_DIR\"
           cd \"\$APP_DIR\"
           
           # ----------------------
           # Create .env file
           # ----------------------
+          echo 'Creating environment file...'
           cat > \"\$APP_DIR/.env\" <<'ENV_EOF'
           GOOGLE_API_KEY=\$GOOGLE_API_KEY
           ENV_EOF
-                    
+          
+          echo 'Environment file contents:'
+          cat \"\$APP_DIR/.env\"
+          
           # ----------------------
           # Build and run Docker container
           # ----------------------
@@ -129,11 +151,13 @@ jobs:
           
           # Verify container is running
           if ! sudo docker ps | grep -q 'attendance-app'; then
-            echo 'Container failed to start. Checking logs:'
+            echo '❌ Container failed to start. Checking logs:'
             sudo docker logs attendance-app
             exit 1
           else
-            echo 'Container started successfully!'
+            echo '✅ Container started successfully!'
+            echo 'Container status:'
+            sudo docker ps | grep attendance-app
           fi
           
           # ----------------------
@@ -141,6 +165,8 @@ jobs:
           # ----------------------
           echo 'Starting ngrok tunnel...'
           nohup ngrok http \$EXTERNAL_PORT --log=stdout > /home/ubuntu/ngrok.log 2>&1 &
+          NGROK_PID=\$!
+          echo \"Started ngrok with PID: \$NGROK_PID\"
           
           # Wait for ngrok to start
           echo 'Waiting for ngrok to initialize...'
@@ -152,12 +178,22 @@ jobs:
           NGROK_URL=\"\"
           echo 'Attempting to retrieve ngrok URL...'
           
-          for i in {1..15}; do
+          for i in {1..20}; do
             echo \"Attempt \$i: Checking ngrok status...\"
+            
+            # Check if ngrok process is still running
+            if ! kill -0 \$NGROK_PID 2>/dev/null; then
+              echo '❌ Ngrok process died. Checking logs:'
+              cat /home/ubuntu/ngrok.log
+              exit 1
+            fi
             
             # Check if ngrok API is responding
             if curl -s --connect-timeout 5 http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
-              NGROK_URL=\$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' 2>/dev/null || echo '')
+              NGROK_RESPONSE=\$(curl -s http://127.0.0.1:4040/api/tunnels)
+              NGROK_URL=\$(echo \"\$NGROK_RESPONSE\" | jq -r '.tunnels[0].public_url' 2>/dev/null || echo '')
+              
+              echo \"Raw ngrok response: \$NGROK_RESPONSE\"
               
               if [ -n \"\$NGROK_URL\" ] && [ \"\$NGROK_URL\" != \"null\" ] && [ \"\$NGROK_URL\" != \"\" ]; then
                 echo \"\$NGROK_URL\" > /home/ubuntu/ngrok_url.txt
@@ -168,17 +204,18 @@ jobs:
                 echo \"Ngrok API responded but no valid URL found\"
               fi
             else
-              echo \"Ngrok API not responding yet...\"
+              echo \"Ngrok API not responding yet (port 4040)...\"
             fi
             
-            if [ \$i -eq 15 ]; then
-              echo '❌ Failed to get ngrok URL after 15 attempts'
+            if [ \$i -eq 20 ]; then
+              echo '❌ Failed to get ngrok URL after 20 attempts'
               echo '📋 Ngrok log contents:'
               cat /home/ubuntu/ngrok.log 2>/dev/null || echo 'No ngrok log found'
               echo '🔍 Ngrok processes:'
-              ps aux | grep ngrok || echo 'No ngrok processes found'
+              ps aux | grep ngrok | grep -v grep || echo 'No ngrok processes found'
               echo '🌐 Network status:'
               netstat -tlnp | grep :4040 || echo 'Ngrok API port not listening'
+              netstat -tlnp | grep :\$EXTERNAL_PORT || echo \"App port \$EXTERNAL_PORT not listening\"
               exit 1
             fi
             
