@@ -30,7 +30,7 @@ jobs:
             INTERNAL_PORT=7860
             EXTERNAL_PORT=7860
 
-            # Create app directory
+            # Ensure app directory exists
             mkdir -p "$APP_DIR"
 
             # Install Docker if missing
@@ -72,7 +72,7 @@ jobs:
             GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
             ENV_EOF
 
-            # Build Docker image with timestamp
+            # Build Docker image
             IMAGE_TAG="attendance-app-$(date +%Y%m%d%H%M%S)"
             sudo docker build -t $IMAGE_TAG "$APP_DIR"
 
@@ -82,7 +82,7 @@ jobs:
             # Start Ngrok in background
             nohup ngrok http $EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
 
-            # Initialize NGROK_URL to avoid unbound variable
+            # Initialize NGROK_URL
             NGROK_URL=""
 
             # Wait for Ngrok tunnel and save URL
