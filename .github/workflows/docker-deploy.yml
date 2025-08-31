@@ -1,4 +1,4 @@
-name: Deploy to EC2 with Ngrok
+name: Deploy to EC2 and get Ngrok URL
 
 on:
   push:
@@ -7,6 +7,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -22,7 +23,7 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "bash -s" <<'ENDSSH'
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "NGROK_AUTH_TOKEN='$NGROK_AUTH_TOKEN' GOOGLE_API_KEY='$GOOGLE_API_KEY' bash -s" <<'ENDSSH'
             set -eux
             APP_DIR="/home/ubuntu/app"
             INTERNAL_PORT=7860
@@ -33,7 +34,7 @@ jobs:
             # Install Docker if missing
             if ! command -v docker >/dev/null 2>&1; then
               sudo apt-get update -y
-              sudo apt-get install -y docker.io git curl unzip jq
+              sudo apt-get install -y docker.io git curl jq unzip
               sudo systemctl enable docker
               sudo systemctl start docker
             fi
@@ -61,7 +62,7 @@ jobs:
             git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
             cd "$APP_DIR"
 
-            # Create .env file, no indentation before ENV_EOF
+            # Create .env file with proper heredoc syntax
             cat > "$APP_DIR/.env" <<ENV_EOF
             GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
             ENV_EOF
@@ -72,7 +73,7 @@ jobs:
             nohup ngrok http $EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
 
             NGROK_URL=""
-            for _ in {1..12}; do
+            for i in {1..12}; do
               NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
               if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
                 echo "Ngrok URL: $NGROK_URL"
