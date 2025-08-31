@@ -25,12 +25,15 @@ jobs:
         run: |
           ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "NGROK_AUTH_TOKEN='$NGROK_AUTH_TOKEN' GOOGLE_API_KEY='$GOOGLE_API_KEY' bash -s" <<'ENDSSH'
             set -eux
+
             APP_DIR="/home/ubuntu/app"
             INTERNAL_PORT=7860
             EXTERNAL_PORT=7860
 
+            # Create app directory
             mkdir -p "$APP_DIR"
 
+            # Install Docker if missing
             if ! command -v docker >/dev/null 2>&1; then
               sudo apt-get update -y
               sudo apt-get install -y docker.io git curl jq unzip
@@ -38,6 +41,7 @@ jobs:
               sudo systemctl start docker
             fi
 
+            # Install Ngrok if missing
             if ! command -v ngrok >/dev/null 2>&1; then
               curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip -o ngrok.zip
               unzip ngrok.zip
@@ -45,33 +49,43 @@ jobs:
               rm -f ngrok.zip
             fi
 
+            # Configure Ngrok
             ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
 
+            # Stop previous container and free port
             if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app\$"; then
               sudo docker rm -f attendance-app || true
             fi
-
             sudo pkill -f "ngrok http" || true
             sudo fuser -k $EXTERNAL_PORT/tcp || true
 
+            # Clean app directory
             sudo rm -rf "$APP_DIR"
             mkdir -p "$APP_DIR"
 
+            # Clone project
             git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
             cd "$APP_DIR"
 
-            # Here-document must have no indentation for ENV_EOF
+            # Create .env file (no indentation for EOF)
             cat > "$APP_DIR/.env" <<ENV_EOF
             GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
             ENV_EOF
 
-            sudo docker build -t attendance-app "$APP_DIR"
-            sudo docker run -d --name attendance-app --env-file "$APP_DIR/.env" -p $EXTERNAL_PORT:$INTERNAL_PORT attendance-app
+            # Build Docker image with timestamp
+            IMAGE_TAG="attendance-app-$(date +%Y%m%d%H%M%S)"
+            sudo docker build -t $IMAGE_TAG "$APP_DIR"
 
+            # Run Docker container
+            sudo docker run -d --name attendance-app --env-file "$APP_DIR/.env" -p $EXTERNAL_PORT:$INTERNAL_PORT $IMAGE_TAG
+
+            # Start Ngrok in background
             nohup ngrok http $EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
 
+            # Initialize NGROK_URL to avoid unbound variable
             NGROK_URL=""
 
+            # Wait for Ngrok tunnel and save URL
             for i in {1..12}; do
               NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
               if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
