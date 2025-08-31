@@ -18,20 +18,18 @@ jobs:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
       - name: Deploy on EC2
-        id: deploy
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "bash -s" <<'ENDSSH'
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "bash -s" <<ENDSSH
           set -eux
 
           APP_DIR=/home/ubuntu/app
           INTERNAL_PORT=7860
           EXTERNAL_PORT=7860
 
-          # Ensure APP_DIR exists
           mkdir -p "$APP_DIR"
 
           # Install Docker if missing
@@ -50,22 +48,22 @@ jobs:
             rm -f ngrok.zip
           fi
 
-          # Configure ngrok
+          # Configure ngrok (now the env variable will work)
           ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
 
-          # Stop any previous containers and free port
+          # Stop previous container and free port
           if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app\$"; then
             sudo docker rm -f attendance-app || true
           fi
           pkill -f "ngrok http" || true
           sudo fuser -k $EXTERNAL_PORT/tcp || true
 
-          # Clone or update project
+          # Clone project
           rm -rf "$APP_DIR/*"
           git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
           cd "$APP_DIR"
 
-          # Create .env file
+          # Create .env
           cat > "$APP_DIR/.env" <<ENV_EOF
           GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
           ENV_EOF
@@ -78,7 +76,7 @@ jobs:
           # Start ngrok in background
           nohup ngrok http $EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
 
-          # Wait for tunnel and save URL
+          # Wait for ngrok URL
           for i in {1..12}; do
             NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
             if [ -n "$NGROK_URL" ] && [[ "$NGROK_URL" != "null" ]]; then
