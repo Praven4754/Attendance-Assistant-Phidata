@@ -30,7 +30,7 @@ jobs:
 
             mkdir -p "\$APP_DIR"
 
-            # Docker install if missing
+            # Install Docker if missing
             if ! command -v docker >/dev/null 2>&1; then
               sudo apt-get update -y
               sudo apt-get install -y docker.io git curl unzip jq
@@ -38,7 +38,7 @@ jobs:
               sudo systemctl start docker
             fi
 
-            # Ngrok install if missing
+            # Install ngrok if missing
             if ! command -v ngrok >/dev/null 2>&1; then
               curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip -o ngrok.zip
               unzip ngrok.zip
@@ -48,32 +48,38 @@ jobs:
 
             ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
 
+            # Remove previous Docker container if exists
             if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app\$"; then
               sudo docker rm -f attendance-app || true
             fi
 
+            # Kill existing ngrok process and free port
             sudo pkill -f "ngrok http" || true
             sudo fuser -k \$EXTERNAL_PORT/tcp || true
 
-            # Remove previous app dir completely, then recreate
+            # Remove and recreate app directory
             sudo rm -rf "\$APP_DIR"
             mkdir -p "\$APP_DIR"
 
+            # Clone repository fresh
             git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "\$APP_DIR"
             cd "\$APP_DIR"
 
-            # IMPORTANT: Unindented ENV_EOF delimiter here with no spaces or tabs before it
+            # Create .env file with no indent and unquoted delimiter
             cat > "\$APP_DIR/.env" <<ENV_EOF
             GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
             ENV_EOF
 
             IMAGE_TAG="attendance-app-\$(date +%Y%m%d%H%M%S)"
 
+            # Build and run Docker container
             sudo docker build -t attendance-app:\$IMAGE_TAG "\$APP_DIR"
             sudo docker run -d --name attendance-app --env-file "\$APP_DIR/.env" -p \$EXTERNAL_PORT:\$INTERNAL_PORT attendance-app:\$IMAGE_TAG
 
+            # Start ngrok in background
             nohup ngrok http \$EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
 
+            # Wait for ngrok public URL to appear
             for i in {1..12}; do
               NGROK_URL=\$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
               if [ -n "\$NGROK_URL" ] && [[ "\$NGROK_URL" != "null" ]]; then
@@ -84,7 +90,7 @@ jobs:
             done
 
             echo "\$NGROK_URL"
-          ENDSSH
+            ENDSSH
 
       - name: Show Ngrok URL
         run: |
