@@ -48,7 +48,7 @@ jobs:
 
             ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
 
-            # Remove old container if exists
+            # Remove previous container if exists
             if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app\$"; then
               sudo docker rm -f attendance-app || true
             fi
@@ -62,19 +62,17 @@ jobs:
             git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "\$APP_DIR"
             cd "\$APP_DIR"
 
-            # Create .env file
             cat > "\$APP_DIR/.env" <<ENV_EOF
             GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
             ENV_EOF
 
-            # Build and run docker container
             sudo docker build -t attendance-app "\$APP_DIR"
             sudo docker run -d --name attendance-app --env-file "\$APP_DIR/.env" -p \$EXTERNAL_PORT:\$INTERNAL_PORT attendance-app
 
-            # Start ngrok tunnel in background
             nohup ngrok http \$EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
 
-            # Wait and get ngrok URL
+            NGROK_URL=""
+
             for i in {1..12}; do
               NGROK_URL=\$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
               if [ -n "\$NGROK_URL" ] && [ "\$NGROK_URL" != "null" ]; then
@@ -87,5 +85,4 @@ jobs:
           ENDSSH
 
       - name: Show Ngrok URL
-        run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "cat /home/ubuntu/ngrok_url.txt"
+        run: ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "cat /home/ubuntu/ngrok_url.txt"
