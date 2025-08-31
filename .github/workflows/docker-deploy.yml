@@ -23,76 +23,79 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "NGROK_AUTH_TOKEN='$NGROK_AUTH_TOKEN' GOOGLE_API_KEY='$GOOGLE_API_KEY' bash -s" <<ENDSSH
-          set -eux
-          
-          APP_DIR="/home/ubuntu/app"
-          INTERNAL_PORT=7860
-          EXTERNAL_PORT=7860
-          
-          # Create app directory
-          mkdir -p "$APP_DIR"
-          
-          # Install Docker if missing
-          if ! command -v docker >/dev/null 2>&1; then
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST bash -s <<ENDSSH
+            set -eux
+
+            # Define variables inside remote shell
+            APP_DIR="/home/ubuntu/app"
+            INTERNAL_PORT=7860
+            EXTERNAL_PORT=7860
+            NGROK_AUTH_TOKEN="${NGROK_AUTH_TOKEN}"
+            GOOGLE_API_KEY="${GOOGLE_API_KEY}"
+
+            # Create app directory
+            mkdir -p "\$APP_DIR"
+
+            # Install Docker if missing
+            if ! command -v docker >/dev/null 2>&1; then
               sudo apt-get update -y
               sudo apt-get install -y docker.io git curl jq unzip
               sudo systemctl enable docker
               sudo systemctl start docker
-          fi
-          
-          # Install ngrok if missing
-          if ! command -v ngrok >/dev/null 2>&1; then
+            fi
+
+            # Install ngrok if missing
+            if ! command -v ngrok >/dev/null 2>&1; then
               curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip -o ngrok.zip
               unzip ngrok.zip
               sudo mv ngrok /usr/local/bin/
               rm -f ngrok.zip
-          fi
-          
-          # Configure ngrok auth token
-          ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
-          
-          # Stop previous container and free port
-          if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app\$"; then
+            fi
+
+            # Configure ngrok auth token
+            ngrok config add-authtoken "\$NGROK_AUTH_TOKEN"
+
+            # Stop previous container and free port
+            if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app\$"; then
               sudo docker rm -f attendance-app || true
-          fi
-          sudo pkill -f "ngrok http" || true
-          sudo fuser -k $EXTERNAL_PORT/tcp || true
-          
-          # Clean app directory
-          sudo rm -rf "$APP_DIR"
-          mkdir -p "$APP_DIR"
-          
-          # Clone project
-          git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
-          cd "$APP_DIR"
-          
-          # Create .env file (no indentation!)
-          cat > "$APP_DIR/.env" <<ENV_EOF
-          GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
-          ENV_EOF
-          
-          # Declare IMAGE_TAG after .env creation
-          IMAGE_TAG="attendance-app-$(date +%Y%m%d%H%M%S)"
-          
-          # Build and run Docker container
-          sudo docker build -t $IMAGE_TAG "$APP_DIR"
-          sudo docker run -d --name attendance-app --env-file "$APP_DIR/.env" -p $EXTERNAL_PORT:$INTERNAL_PORT $IMAGE_TAG
-          
-          # Start ngrok in background
-          nohup ngrok http $EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
-          
-          # Wait for Ngrok tunnel and save URL
-          NGROK_URL=""
-          for i in {1..12}; do
-              NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
-              if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
-                  echo "Ngrok URL: $NGROK_URL"
-                  echo "$NGROK_URL" > /home/ubuntu/ngrok_url.txt
-                  break
+            fi
+            sudo pkill -f "ngrok http" || true
+            sudo fuser -k \$EXTERNAL_PORT/tcp || true
+
+            # Clean app directory
+            sudo rm -rf "\$APP_DIR"
+            mkdir -p "\$APP_DIR"
+
+            # Clone project
+            git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "\$APP_DIR"
+            cd "\$APP_DIR"
+
+            # Create .env file (no indentation in here-doc)
+            cat > "\$APP_DIR/.env" <<ENV_EOF
+            GOOGLE_API_KEY='\${GOOGLE_API_KEY:-not_set}'
+            ENV_EOF
+
+            # Set IMAGE_TAG
+            IMAGE_TAG="attendance-app-\$(date +%Y%m%d%H%M%S)"
+
+            # Build and run Docker container
+            sudo docker build -t \$IMAGE_TAG "\$APP_DIR"
+            sudo docker run -d --name attendance-app --env-file "\$APP_DIR/.env" -p \$EXTERNAL_PORT:\$INTERNAL_PORT \$IMAGE_TAG
+
+            # Start ngrok in background
+            nohup ngrok http \$EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
+
+            # Fetch ngrok URL
+            NGROK_URL=""
+            for i in {1..12}; do
+              NGROK_URL=\$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
+              if [ -n "\$NGROK_URL" ] && [ "\$NGROK_URL" != "null" ]; then
+                echo "Ngrok URL: \$NGROK_URL"
+                echo "\$NGROK_URL" > /home/ubuntu/ngrok_url.txt
+                break
               fi
               sleep 5
-          done
+            done
           ENDSSH
 
       - name: Show Ngrok URL
