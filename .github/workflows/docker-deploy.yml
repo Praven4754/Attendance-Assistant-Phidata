@@ -27,7 +27,7 @@ jobs:
           export GOOGLE_API_KEY='$GOOGLE_API_KEY'
           export NGROK_AUTH_TOKEN='$NGROK_AUTH_TOKEN'
           
-          set -eux
+          set -ux
           
           # ----------------------
           # Variables
@@ -66,17 +66,23 @@ jobs:
           ngrok config add-authtoken \"\$NGROK_AUTH_TOKEN\"
           
           # ----------------------
-          # Stop previous container & free port (with proper error handling)
+          # Cleanup (disable strict error checking for cleanup)
           # ----------------------
+          set +e
+          
+          # Stop previous container
           if sudo docker ps -a --format '{{.Names}}' | grep -q '^attendance-app\$'; then
             sudo docker rm -f attendance-app
           fi
           
-          # Kill existing ngrok processes (ignore errors if none exist)
-          sudo pkill -f 'ngrok http' || true
+          # Kill existing ngrok processes
+          sudo pkill -f 'ngrok http'
           
-          # Free port (ignore errors if port not in use)
-          sudo fuser -k \$EXTERNAL_PORT/tcp || true
+          # Free port
+          sudo fuser -k \$EXTERNAL_PORT/tcp
+          
+          # Re-enable strict error checking
+          set -e
           
           # ----------------------
           # Clean app directory
@@ -110,7 +116,7 @@ jobs:
           # Verify container is running
           if ! sudo docker ps | grep -q 'attendance-app'; then
             echo 'Container failed to start. Checking logs:'
-            sudo docker logs attendance-app || true
+            sudo docker logs attendance-app
             exit 1
           fi
           
