@@ -112,6 +112,7 @@ Here are some natural language commands you can use:
 * 📧 “Send attendance for this month.”
 * 🧾 “Generate invoice for AADHITHYA RAJA D N for July 2025”    """"////////////// Still Working on dont try /////////////""""
 * 🔁 “Reset and prefill attendance for July 2025”
+----
 
 ## 📌 Notes
 
