@@ -66,23 +66,34 @@ jobs:
           ngrok config add-authtoken \"\$NGROK_AUTH_TOKEN\"
           
           # ----------------------
-          # Cleanup (disable strict error checking for cleanup)
+          # Safe cleanup with existence checks
           # ----------------------
-          set +e
           
-          # Stop previous container
+          # Stop previous container if it exists
           if sudo docker ps -a --format '{{.Names}}' | grep -q '^attendance-app\$'; then
+            echo 'Stopping existing container...'
             sudo docker rm -f attendance-app
+          else
+            echo 'No existing container to remove'
           fi
           
-          # Kill existing ngrok processes
-          sudo pkill -f 'ngrok http'
+          # Kill existing ngrok processes if they exist
+          if pgrep -f 'ngrok http' >/dev/null; then
+            echo 'Killing existing ngrok processes...'
+            sudo pkill -f 'ngrok http'
+            sleep 2
+          else
+            echo 'No existing ngrok processes to kill'
+          fi
           
-          # Free port
-          sudo fuser -k \$EXTERNAL_PORT/tcp
-          
-          # Re-enable strict error checking
-          set -e
+          # Free port if it's in use
+          if sudo fuser \$EXTERNAL_PORT/tcp >/dev/null 2>&1; then
+            echo 'Freeing port \$EXTERNAL_PORT...'
+            sudo fuser -k \$EXTERNAL_PORT/tcp
+            sleep 2
+          else
+            echo 'Port \$EXTERNAL_PORT is already free'
+          fi
           
           # ----------------------
           # Clean app directory
@@ -102,12 +113,15 @@ jobs:
           cat > \"\$APP_DIR/.env\" <<'ENV_EOF'
           GOOGLE_API_KEY=\$GOOGLE_API_KEY
           ENV_EOF
-          
+                    
           # ----------------------
           # Build and run Docker container
           # ----------------------
           IMAGE_TAG=\"attendance-app-\$(date +%Y%m%d%H%M%S)\"
+          echo \"Building Docker image: \$IMAGE_TAG\"
           sudo docker build -t \"\$IMAGE_TAG\" \"\$APP_DIR\"
+          
+          echo \"Starting Docker container...\"
           sudo docker run -d --name attendance-app --env-file \"\$APP_DIR/.env\" -p \"\$EXTERNAL_PORT:\$INTERNAL_PORT\" \"\$IMAGE_TAG\"
           
           # Wait for container to start
@@ -118,41 +132,53 @@ jobs:
             echo 'Container failed to start. Checking logs:'
             sudo docker logs attendance-app
             exit 1
+          else
+            echo 'Container started successfully!'
           fi
           
           # ----------------------
           # Start ngrok
           # ----------------------
+          echo 'Starting ngrok tunnel...'
           nohup ngrok http \$EXTERNAL_PORT --log=stdout > /home/ubuntu/ngrok.log 2>&1 &
           
           # Wait for ngrok to start
-          echo 'Waiting for ngrok to start...'
+          echo 'Waiting for ngrok to initialize...'
           sleep 10
           
           # ----------------------
           # Fetch Ngrok URL
           # ----------------------
           NGROK_URL=\"\"
+          echo 'Attempting to retrieve ngrok URL...'
+          
           for i in {1..15}; do
             echo \"Attempt \$i: Checking ngrok status...\"
             
             # Check if ngrok API is responding
-            if curl -s http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
+            if curl -s --connect-timeout 5 http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
               NGROK_URL=\$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' 2>/dev/null || echo '')
               
               if [ -n \"\$NGROK_URL\" ] && [ \"\$NGROK_URL\" != \"null\" ] && [ \"\$NGROK_URL\" != \"\" ]; then
                 echo \"\$NGROK_URL\" > /home/ubuntu/ngrok_url.txt
-                echo \"Success! Ngrok URL: \$NGROK_URL\"
+                echo \"✅ Success! Ngrok URL: \$NGROK_URL\"
+                echo \"🔗 App is accessible at: \$NGROK_URL\"
                 break
+              else
+                echo \"Ngrok API responded but no valid URL found\"
               fi
+            else
+              echo \"Ngrok API not responding yet...\"
             fi
             
             if [ \$i -eq 15 ]; then
-              echo 'Failed to get ngrok URL after 15 attempts'
-              echo 'Ngrok log contents:'
+              echo '❌ Failed to get ngrok URL after 15 attempts'
+              echo '📋 Ngrok log contents:'
               cat /home/ubuntu/ngrok.log 2>/dev/null || echo 'No ngrok log found'
-              echo 'Ngrok processes:'
+              echo '🔍 Ngrok processes:'
               ps aux | grep ngrok || echo 'No ngrok processes found'
+              echo '🌐 Network status:'
+              netstat -tlnp | grep :4040 || echo 'Ngrok API port not listening'
               exit 1
             fi
             
@@ -165,3 +191,9 @@ jobs:
           NGROK_URL=$(ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "cat /home/ubuntu/ngrok_url.txt 2>/dev/null || echo 'URL not found'")
           echo "🚀 Deployment Complete!"
           echo "📱 Access your app at: $NGROK_URL"
+          if [[ "$NGROK_URL" != "URL not found" ]]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Failed to retrieve ngrok URL"
+            exit 1
+          fi
