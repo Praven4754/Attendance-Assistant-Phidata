@@ -7,7 +7,6 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -17,19 +16,19 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
 
-      - name: Deploy on EC2
+      - name: Deploy on EC2 and get Ngrok URL
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "bash -s" <<ENDSSH
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "bash -s" <<'ENDSSH'
             set -eux
             APP_DIR="/home/ubuntu/app"
             INTERNAL_PORT=7860
             EXTERNAL_PORT=7860
 
-            mkdir -p "\$APP_DIR"
+            mkdir -p "$APP_DIR"
 
             # Install Docker if missing
             if ! command -v docker >/dev/null 2>&1; then
@@ -49,44 +48,40 @@ jobs:
 
             ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
 
-            # Remove old container if present
             if sudo docker ps -a --format '{{.Names}}' | grep -Eq "^attendance-app\$"; then
               sudo docker rm -f attendance-app || true
             fi
 
             sudo pkill -f "ngrok http" || true
-            sudo fuser -k \$EXTERNAL_PORT/tcp || true
+            sudo fuser -k $EXTERNAL_PORT/tcp || true
 
-            sudo rm -rf "\$APP_DIR"
-            mkdir -p "\$APP_DIR"
+            sudo rm -rf "$APP_DIR"
+            mkdir -p "$APP_DIR"
 
-            git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "\$APP_DIR"
-            cd "\$APP_DIR"
+            git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
+            cd "$APP_DIR"
 
-            # Create .env with no indentation for here-doc delimiter
-            cat > "\$APP_DIR/.env" <<ENV_EOF
+            # Create .env file, no indentation before ENV_EOF
+            cat > "$APP_DIR/.env" <<ENV_EOF
             GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
             ENV_EOF
 
-            sudo docker build -t attendance-app "\$APP_DIR"
-            sudo docker run -d --name attendance-app --env-file "\$APP_DIR/.env" -p \$EXTERNAL_PORT:\$INTERNAL_PORT attendance-app
+            sudo docker build -t attendance-app "$APP_DIR"
+            sudo docker run -d --name attendance-app --env-file "$APP_DIR/.env" -p $EXTERNAL_PORT:$INTERNAL_PORT attendance-app
 
-            # Start ngrok tunnel
-            nohup ngrok http \$EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
+            nohup ngrok http $EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
 
             NGROK_URL=""
-
-            # Wait max 60 seconds for ngrok URL
-            for i in {1..12}; do
-              NGROK_URL=\$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
-              if [ -n "\$NGROK_URL" ] && [ "\$NGROK_URL" != "null" ]; then
-                echo "Ngrok URL: \$NGROK_URL"
-                echo "\$NGROK_URL" > /home/ubuntu/ngrok_url.txt
+            for _ in {1..12}; do
+              NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
+              if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
+                echo "Ngrok URL: $NGROK_URL"
+                echo "$NGROK_URL" > /home/ubuntu/ngrok_url.txt
                 break
               fi
               sleep 5
             done
           ENDSSH
+
       - name: Show Ngrok URL
-        run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "cat /home/ubuntu/ngrok_url.txt"
+        run: ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "cat /home/ubuntu/ngrok_url.txt"
