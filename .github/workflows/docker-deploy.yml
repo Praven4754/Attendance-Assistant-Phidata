@@ -30,7 +30,7 @@ jobs:
 
             mkdir -p "\$APP_DIR"
 
-            # Install Docker if missing
+            # Docker install if missing
             if ! command -v docker >/dev/null 2>&1; then
               sudo apt-get update -y
               sudo apt-get install -y docker.io git curl unzip jq
@@ -38,7 +38,7 @@ jobs:
               sudo systemctl start docker
             fi
 
-            # Install ngrok if missing
+            # Ngrok install if missing
             if ! command -v ngrok >/dev/null 2>&1; then
               curl -s https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-stable-linux-amd64.zip -o ngrok.zip
               unzip ngrok.zip
@@ -55,13 +55,14 @@ jobs:
             sudo pkill -f "ngrok http" || true
             sudo fuser -k \$EXTERNAL_PORT/tcp || true
 
+            # Remove previous app dir completely, then recreate
             sudo rm -rf "\$APP_DIR"
             mkdir -p "\$APP_DIR"
 
             git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "\$APP_DIR"
             cd "\$APP_DIR"
 
-            # Use unindented here-doc with no quotes, exact delimiter position
+            # IMPORTANT: Unindented ENV_EOF delimiter here with no spaces or tabs before it
             cat > "\$APP_DIR/.env" <<ENV_EOF
             GOOGLE_API_KEY='${GOOGLE_API_KEY:-not_set}'
             ENV_EOF
