@@ -69,19 +69,8 @@ jobs:
             sudo docker run -d --name attendance-app --env-file "\$APP_DIR/.env" -p \$EXTERNAL_PORT:\$INTERNAL_PORT attendance-app
 
             nohup ngrok http \$EXTERNAL_PORT > /home/ubuntu/ngrok.log 2>&1 &
+          ENDSSH
 
-            for i in {1..12}; do
-              NGROK_URL=\$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url')
-              if [ -n "\$NGROK_URL" ] && [[ "\$NGROK_URL" != "null" ]]; then
-                echo "\$NGROK_URL" > /home/ubuntu/ngrok_url.txt
-                break
-              fi
-              sleep 5
-            done
-
-            echo "\$NGROK_URL"
-            ENDSSH
-
-      - name: Show Ngrok URL
+      - name: Show deployed app status
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "cat /home/ubuntu/ngrok_url.txt"
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "sudo docker ps -f name=attendance-app"
