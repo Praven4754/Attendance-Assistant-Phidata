@@ -23,7 +23,7 @@ jobs:
           GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
           NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "bash -s" <<'ENDSSH'
+          ssh -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "bash -s" <<ENDSSH
           set -eux
 
           APP_DIR=/home/ubuntu/app
@@ -52,12 +52,14 @@ jobs:
           # Ensure APP_DIR exists
           mkdir -p "\$APP_DIR"
           rm -rf "\$APP_DIR"/*
+
+          # Clone repo
           git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "\$APP_DIR"
           cd "\$APP_DIR"
 
           # Create .env file
           cat > "\$APP_DIR/.env" <<ENV_EOF
-          GOOGLE_API_KEY='\${GOOGLE_API_KEY:-not_set}'
+          GOOGLE_API_KEY='\$GOOGLE_API_KEY'
           ENV_EOF
 
           # Remove old Docker container if exists
@@ -90,7 +92,7 @@ jobs:
 
           # Print ngrok URL
           cat /home/ubuntu/ngrok_url.txt
-          ENDSSH
+ENDSSH
 
       - name: Show Ngrok URL
         run: |
