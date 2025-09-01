@@ -119,3 +119,4 @@ Here are some natural language commands you can use:
 * All attendance data is saved in `attendance.xlsx`.
 * Invoices are generated as PDFs from a local `SQLite` database.
 * Emailing requires a verified SendGrid sender and proper `.env` config.
+----
