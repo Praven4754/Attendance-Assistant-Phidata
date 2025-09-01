@@ -65,16 +65,17 @@ jobs:
           ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
 
           # ----------------------
-          # Stop existing Docker container if running
+          # Stop any existing Docker container using port 7860
           # ----------------------
-          if sudo docker ps -a --format '{{.Names}}' | grep -q '^attendance-app\$'; then
-            sudo docker rm -f attendance-app || true
+          CONTAINER_ID=$(sudo docker ps -q --filter "publish=$EXTERNAL_PORT")
+          if [ -n "$CONTAINER_ID" ]; then
+            sudo docker rm -f $CONTAINER_ID
           fi
 
-          # ----------------------
-          # Kill existing ngrok processes and free port
-          # ----------------------
+          # Kill existing ngrok processes
           sudo pkill -f 'ngrok http' || true
+
+          # Free port 7860 just in case
           sudo fuser -k $EXTERNAL_PORT/tcp || true
 
           # ----------------------
