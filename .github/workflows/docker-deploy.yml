@@ -19,7 +19,7 @@ jobs:
 
       - name: Deploy on EC2 and get Ngrok URL
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} bash -s <<ENDSSH
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} bash -s <<'ENDSSH'
           set -eux
 
           # ----------------------
@@ -38,7 +38,7 @@ jobs:
           # ----------------------
           # Prepare directories
           # ----------------------
-          mkdir -p /home/ubuntu/app
+          mkdir -p "$APP_DIR"
 
           # ----------------------
           # Install Docker if missing
@@ -80,15 +80,15 @@ jobs:
           # ----------------------
           # Clean and clone project
           # ----------------------
-          sudo rm -rf /home/ubuntu/app
-          mkdir -p /home/ubuntu/app
-          git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git /home/ubuntu/app
-          cd /home/ubuntu/app
+          sudo rm -rf "$APP_DIR"
+          mkdir -p "$APP_DIR"
+          git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
+          cd "$APP_DIR"
 
           # ----------------------
-          # Create .env file
+          # Create .env file (fixed for variable expansion)
           # ----------------------
-          cat > /home/ubuntu/app/.env <<'ENV_EOF'
+          cat > "$APP_DIR/.env" <<ENV_EOF
           GOOGLE_API_KEY=$GOOGLE_API_KEY
           ENV_EOF
 
@@ -96,8 +96,8 @@ jobs:
           # Build and run Docker container
           # ----------------------
           IMAGE_TAG="attendance-app-\$(date +%Y%m%d%H%M%S)"
-          sudo docker build -t "$IMAGE_TAG" /home/ubuntu/app
-          sudo docker run -d --name attendance-app --env-file /home/ubuntu/app/.env -p "$EXTERNAL_PORT:$INTERNAL_PORT" "$IMAGE_TAG"
+          sudo docker build -t "$IMAGE_TAG" "$APP_DIR"
+          sudo docker run -d --name attendance-app --env-file "$APP_DIR/.env" -p "$EXTERNAL_PORT:$INTERNAL_PORT" "$IMAGE_TAG"
 
           # ----------------------
           # Start ngrok
@@ -112,7 +112,7 @@ jobs:
           for i in {1..20}; do
             NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
             if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
-              echo "$NGROK_URL" > /opt/ngrok_url.txt
+              echo "$NGROK_URL" | sudo tee /opt/ngrok_url.txt
               echo "✅ Ngrok URL: $NGROK_URL"
               break
             fi
