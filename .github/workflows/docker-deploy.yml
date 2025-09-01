@@ -19,24 +19,26 @@ jobs:
 
       - name: Deploy on EC2 and get Ngrok URL
         run: |
-          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "bash -s" <<ENDSSH
+          ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} bash -s <<ENDSSH
           set -eux
 
-          # Export secrets as environment variables in EC2 session
+          # ----------------------
+          # Export GitHub secrets
+          # ----------------------
           export NGROK_AUTH_TOKEN='${{ secrets.NGROK_AUTH_TOKEN }}'
           export GOOGLE_API_KEY='${{ secrets.GOOGLE_API_KEY }}'
 
           # ----------------------
           # Variables
           # ----------------------
-          APP_DIR="/home/ubuntu/app"
           INTERNAL_PORT=7860
           EXTERNAL_PORT=7860
+          APP_DIR="/home/ubuntu/app"
 
           # ----------------------
           # Prepare directories
           # ----------------------
-          mkdir -p "$APP_DIR"
+          mkdir -p /home/ubuntu/app
 
           # ----------------------
           # Install Docker if missing
@@ -63,57 +65,39 @@ jobs:
           ngrok config add-authtoken "$NGROK_AUTH_TOKEN"
 
           # ----------------------
-          # Stop existing Docker container if any
+          # Stop existing Docker container if running
           # ----------------------
-          if sudo docker ps -a --format '{{.Names}}' | grep -q '^attendance-app$'; then
-            sudo docker rm -f attendance-app
+          if sudo docker ps -a --format '{{.Names}}' | grep -q '^attendance-app\$'; then
+            sudo docker rm -f attendance-app || true
           fi
 
           # ----------------------
-          # Kill existing ngrok processes
+          # Kill existing ngrok processes and free port
           # ----------------------
-          NGROK_PIDS=$(pgrep -f 'ngrok http' || echo '')
-          if [ -n "$NGROK_PIDS" ]; then
-            for pid in $NGROK_PIDS; do
-              kill -9 $pid || true
-            done
-          fi
+          sudo pkill -f 'ngrok http' || true
+          sudo fuser -k $EXTERNAL_PORT/tcp || true
 
           # ----------------------
-          # Free port if in use
+          # Clean and clone project
           # ----------------------
-          PORT_PIDS=$(sudo fuser $EXTERNAL_PORT/tcp 2>/dev/null || echo '')
-          if [ -n "$PORT_PIDS" ]; then
-            for pid in $PORT_PIDS; do
-              sudo kill -9 $pid || true
-            done
-          fi
+          sudo rm -rf /home/ubuntu/app
+          mkdir -p /home/ubuntu/app
+          git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git /home/ubuntu/app
+          cd /home/ubuntu/app
 
           # ----------------------
-          # Clean app directory
+          # Create .env file
           # ----------------------
-          sudo rm -rf "$APP_DIR"
-          mkdir -p "$APP_DIR"
-
-          # ----------------------
-          # Clone project
-          # ----------------------
-          git clone https://github.com/Praven4754/Attendance-Assistant-Phidata.git "$APP_DIR"
-          cd "$APP_DIR"
-
-          # ----------------------
-          # Create .env file (fixed here-doc)
-          # ----------------------
-          cat > "$APP_DIR/.env" <<ENV_EOF
+          cat > /home/ubuntu/app/.env <<'ENV_EOF'
           GOOGLE_API_KEY=$GOOGLE_API_KEY
           ENV_EOF
 
           # ----------------------
           # Build and run Docker container
           # ----------------------
-          IMAGE_TAG="attendance-app-$(date +%Y%m%d%H%M%S)"
-          sudo docker build -t "$IMAGE_TAG" "$APP_DIR"
-          sudo docker run -d --name attendance-app --env-file "$APP_DIR/.env" -p "$EXTERNAL_PORT:$INTERNAL_PORT" "$IMAGE_TAG"
+          IMAGE_TAG="attendance-app-\$(date +%Y%m%d%H%M%S)"
+          sudo docker build -t "$IMAGE_TAG" /home/ubuntu/app
+          sudo docker run -d --name attendance-app --env-file /home/ubuntu/app/.env -p "$EXTERNAL_PORT:$INTERNAL_PORT" "$IMAGE_TAG"
 
           # ----------------------
           # Start ngrok
@@ -122,23 +106,29 @@ jobs:
           sleep 10
 
           # ----------------------
-          # Fetch Ngrok URL and save
+          # Fetch ngrok URL
           # ----------------------
           NGROK_URL=""
           for i in {1..20}; do
             NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels | jq -r '.tunnels[0].public_url' || echo "")
             if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
-              echo "$NGROK_URL" > /home/ubuntu/ngrok_url.txt
-              echo "Ngrok URL: $NGROK_URL"
+              echo "$NGROK_URL" > /opt/ngrok_url.txt
+              echo "✅ Ngrok URL: $NGROK_URL"
               break
             fi
             sleep 5
           done
+
+          if [ -z "$NGROK_URL" ] || [ "$NGROK_URL" == "null" ]; then
+            echo "❌ Failed to get ngrok URL"
+            cat /home/ubuntu/ngrok.log || echo "No ngrok log found"
+            exit 1
+          fi
           ENDSSH
 
       - name: Show Ngrok URL
         run: |
-          NGROK_URL=$(ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "cat /home/ubuntu/ngrok_url.txt 2>/dev/null || echo 'URL not found'")
+          NGROK_URL=$(ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "cat /opt/ngrok_url.txt 2>/dev/null || echo 'URL not found'")
           echo "🚀 Deployment Complete!"
           echo "📱 Access your app at: $NGROK_URL"
           if [[ "$NGROK_URL" != "URL not found" ]]; then
